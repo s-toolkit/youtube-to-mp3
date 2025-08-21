@@ -27,11 +27,21 @@ function normalizeYouTubeUrl(url) {
       return `https://www.youtube.com/watch?v=${u.searchParams.get("v")}`;
     }
 
+    // youtube.com/shorts/<id>
+    if (u.pathname.startsWith("/shorts/")) {
+      return `https://www.youtube.com/watch?v=${u.pathname.split("/")[2]}`;
+    }
+
     return null; // not recognized
   } catch {
     return null;
   }
 }
+
+// Optional: simple root route
+app.get("/", (req, res) => {
+  res.send("✅ YouTube MP3 API running. Use /download?url=VIDEO_URL");
+});
 
 // API Endpoint
 app.get("/download", async (req, res) => {
@@ -56,11 +66,9 @@ app.get("/download", async (req, res) => {
 
     let result = await response.json();
 
-    // Handle queue: retry every 3 seconds if queued
-    while (result.filename === "queued") {
-      console.log("Waiting in queue...");
+    if (result.filename === "queued") {
+      // simple single retry after 3s
       await new Promise(r => setTimeout(r, 3000));
-
       response = await fetch("https://www.mazmazika.com/dl2025.php", {
         method: "POST",
         body: form
@@ -72,16 +80,11 @@ app.get("/download", async (req, res) => {
       return res.status(500).json({ error: result.data });
     }
 
-    // Decode base64 MP3
-    const buffer = Buffer.from(result.data, "base64");
-
-    // Send MP3 file
-    res.setHeader(
-      "Content-Disposition",
-      `attachment; filename="${result.filename || "download.mp3"}"`
-    );
-    res.setHeader("Content-Type", "audio/mpeg");
-    res.send(buffer);
+    // Return base64 string instead of saving file
+    res.json({
+      filename: result.filename || "download.mp3",
+      base64: result.data
+    });
 
   } catch (err) {
     console.error("Download error:", err);
